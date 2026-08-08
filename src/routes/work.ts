@@ -7,6 +7,7 @@ import { permit } from "../auth.js";
 import { HttpError } from "../http.js";
 import type { AuthRequest } from "../types.js";
 import { notify } from "../notifications.js";
+import { assertOwned } from "../ownership.js";
 
 const router = Router();
 const routeParam=(req:AuthRequest,key:string)=>String(req.params[key]);
@@ -68,6 +69,7 @@ router.get("/cases/:id",(req:AuthRequest,res)=>{
 
 router.post("/cases", permit("cases:write"), (req: AuthRequest, res) => {
   const data = caseSchema.parse(req.body); const id = randomUUID(); const reference = ref("V"); const db = getDb();
+  assertOwned(db,req.user!.councilId,"users",data.responsibleId,"Verantwortliches Mitglied");
   db.prepare(`INSERT INTO cases (id,council_id,reference,title,category,legal_basis,description,status,priority,received_at,due_at,responsible_id,created_by)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, req.user!.councilId, reference, data.title, data.category, data.legalBasis, data.description, data.status, data.priority, data.receivedAt, data.dueAt, data.responsibleId, req.user!.id);
   if(data.responsibleId)notify(db,req.user!.councilId,data.responsibleId,"case_assigned",`Neuer Vorgang ${reference}`,data.title,`/vorgaenge?open=${id}`);
@@ -79,6 +81,7 @@ router.patch("/cases/:id", permit("cases:write"), (req: AuthRequest, res) => {
   const data = caseSchema.partial().parse(req.body); const db = getDb();
   const existing = db.prepare("SELECT * FROM cases WHERE id=? AND council_id=?").get(routeParam(req,"id"), req.user!.councilId) as Record<string, unknown> | undefined;
   if (!existing) throw new HttpError(404, "Vorgang nicht gefunden.");
+  assertOwned(db,req.user!.councilId,"users",data.responsibleId,"Verantwortliches Mitglied");
   const map: Record<string, string> = { title:"title", category:"category", legalBasis:"legal_basis", description:"description", status:"status", priority:"priority", receivedAt:"received_at", dueAt:"due_at", responsibleId:"responsible_id" };
   const entries = Object.entries(data).filter(([key]) => map[key]);
   if (entries.length) db.prepare(`UPDATE cases SET ${entries.map(([key]) => `${map[key]}=?`).join(",")}, updated_at=CURRENT_TIMESTAMP WHERE id=? AND council_id=?`).run(...entries.map(([,v])=>v), routeParam(req,"id"), req.user!.councilId);
@@ -100,10 +103,11 @@ router.get("/tasks", (req: AuthRequest, res) => {
   res.json({ items: rows });
 });
 
-router.get("/tasks/:id",(req:AuthRequest,res)=>{const db=getDb(),c=req.user!.councilId,id=routeParam(req,"id"),item=db.prepare(`SELECT t.*,u.first_name assigned_first_name,u.last_name assigned_last_name,ca.reference case_reference,ca.title case_title,m.sequence_no meeting_sequence,m.title meeting_title FROM tasks t LEFT JOIN users u ON u.id=t.assigned_to LEFT JOIN cases ca ON ca.id=t.case_id LEFT JOIN meetings m ON m.id=t.meeting_id WHERE t.id=? AND t.council_id=?`).get(id,c);if(!item)throw new HttpError(404,"Aufgabe nicht gefunden.");res.json({item,related:{}});});
+router.get("/tasks/:id",(req:AuthRequest,res)=>{const db=getDb(),c=req.user!.councilId,id=routeParam(req,"id"),item=db.prepare(`SELECT t.*,u.first_name assigned_first_name,u.last_name assigned_last_name,ca.reference case_reference,ca.title case_title,m.sequence_no meeting_sequence,m.title meeting_title FROM tasks t LEFT JOIN users u ON u.id=t.assigned_to LEFT JOIN cases ca ON ca.id=t.case_id LEFT JOIN meetings m ON m.id=t.meeting_id WHERE t.id=? AND t.council_id=?`).get(id,c) as Record<string,unknown>|undefined;if(!item)throw new HttpError(404,"Aufgabe nicht gefunden.");const cases=item.case_id?db.prepare("SELECT id,reference,title,status,priority,due_at FROM cases WHERE id=? AND council_id=?").all(item.case_id,c):[],meetings=item.meeting_id?db.prepare("SELECT id,sequence_no,title,status,starts_at FROM meetings WHERE id=? AND council_id=?").all(item.meeting_id,c):[];res.json({item,related:{cases,meetings}});});
 
 router.post("/tasks", permit("tasks:write"), (req: AuthRequest, res) => {
   const data=taskSchema.parse(req.body); const id=randomUUID(); const db=getDb();
+  assertOwned(db,req.user!.councilId,"users",data.assignedTo,"Zuständiges Mitglied");assertOwned(db,req.user!.councilId,"cases",data.caseId,"Vorgang");assertOwned(db,req.user!.councilId,"meetings",data.meetingId,"Sitzung");
   db.prepare(`INSERT INTO tasks (id,council_id,title,description,status,priority,due_at,assigned_to,case_id,meeting_id,created_by)
     VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(id,req.user!.councilId,data.title,data.description,data.status,data.priority,data.dueAt,data.assignedTo,data.caseId,data.meetingId,req.user!.id);
   if(data.assignedTo)notify(db,req.user!.councilId,data.assignedTo,"task_assigned","Neue Aufgabe",data.title,`/aufgaben?open=${id}`);
@@ -113,6 +117,7 @@ router.post("/tasks", permit("tasks:write"), (req: AuthRequest, res) => {
 router.patch("/tasks/:id", permit("tasks:write"), (req: AuthRequest, res) => {
   const data=taskSchema.partial().parse(req.body); const db=getDb();
   if (!db.prepare("SELECT id FROM tasks WHERE id=? AND council_id=?").get(routeParam(req,"id"),req.user!.councilId)) throw new HttpError(404,"Aufgabe nicht gefunden.");
+  assertOwned(db,req.user!.councilId,"users",data.assignedTo,"Zuständiges Mitglied");assertOwned(db,req.user!.councilId,"cases",data.caseId,"Vorgang");assertOwned(db,req.user!.councilId,"meetings",data.meetingId,"Sitzung");
   const map:Record<string,string>={title:"title",description:"description",status:"status",priority:"priority",dueAt:"due_at",assignedTo:"assigned_to",caseId:"case_id",meetingId:"meeting_id"};
   const entries=Object.entries(data).filter(([key])=>map[key]);
   if(entries.length) db.prepare(`UPDATE tasks SET ${entries.map(([key])=>`${map[key]}=?`).join(",")}, completed_at=CASE WHEN ?='erledigt' THEN CURRENT_TIMESTAMP ELSE completed_at END, updated_at=CURRENT_TIMESTAMP WHERE id=? AND council_id=?`).run(...entries.map(([,v])=>v),data.status??"",routeParam(req,"id"),req.user!.councilId);
@@ -131,12 +136,14 @@ router.get("/inquiries", (req:AuthRequest,res)=>{
 router.get("/inquiries/:id",(req:AuthRequest,res)=>{const item=getDb().prepare(`SELECT i.*,u.first_name assigned_first_name,u.last_name assigned_last_name FROM inquiries i LEFT JOIN users u ON u.id=i.assigned_to WHERE i.id=? AND i.council_id=?`).get(routeParam(req,"id"),req.user!.councilId);if(!item)throw new HttpError(404,"Anfrage nicht gefunden.");res.json({item,related:{}});});
 router.post("/inquiries",permit("inquiries:write"),(req:AuthRequest,res)=>{
   const d=inquirySchema.parse(req.body),id=randomUUID(),reference=ref("A"),db=getDb();
+  assertOwned(db,req.user!.councilId,"users",d.assignedTo,"Verantwortliches Mitglied");
   db.prepare(`INSERT INTO inquiries (id,council_id,reference,subject,requester_name,requester_contact,channel,category,description,consent_recorded,status,assigned_to,due_at,outcome,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,req.user!.councilId,reference,d.subject,d.requesterName,d.requesterContact,d.channel,d.category,d.description,d.consentRecorded?1:0,d.status,d.assignedTo,d.dueAt,d.outcome,req.user!.id);
   if(d.assignedTo)notify(db,req.user!.councilId,d.assignedTo,"inquiry_assigned",`Vertrauliche Anfrage ${reference}`,d.subject,`/anfragen?open=${id}`);
   audit(db,req,"created","inquiry",id,{reference,subject:d.subject});res.status(201).json({id,reference});
 });
 router.patch("/inquiries/:id",permit("inquiries:write"),(req:AuthRequest,res)=>{
   const d=inquirySchema.partial().parse(req.body),db=getDb();if(!db.prepare("SELECT id FROM inquiries WHERE id=? AND council_id=?").get(routeParam(req,"id"),req.user!.councilId))throw new HttpError(404,"Anfrage nicht gefunden.");
+  assertOwned(db,req.user!.councilId,"users",d.assignedTo,"Verantwortliches Mitglied");
   const map:Record<string,string>={subject:"subject",requesterName:"requester_name",requesterContact:"requester_contact",channel:"channel",category:"category",description:"description",consentRecorded:"consent_recorded",status:"status",assignedTo:"assigned_to",dueAt:"due_at",outcome:"outcome"};const e=Object.entries(d).filter(([k])=>map[k]);if(e.length)db.prepare(`UPDATE inquiries SET ${e.map(([k])=>`${map[k]}=?`).join(",")},updated_at=CURRENT_TIMESTAMP WHERE id=? AND council_id=?`).run(...e.map(([k,v])=>k==="consentRecorded"?(v?1:0):v),routeParam(req,"id"),req.user!.councilId);audit(db,req,"updated","inquiry",routeParam(req,"id"));res.status(204).end();
 });
 
@@ -146,11 +153,11 @@ const agreementSchema=z.object({
 });
 router.get("/agreements",(req:AuthRequest,res)=>{const rows=getDb().prepare(`SELECT a.*,u.first_name owner_first_name,u.last_name owner_last_name FROM agreements a LEFT JOIN users u ON u.id=a.owner_id WHERE a.council_id=? ORDER BY a.title`).all(req.user!.councilId);res.json({items:rows});});
 router.get("/agreements/:id",(req:AuthRequest,res)=>{const db=getDb(),c=req.user!.councilId,id=routeParam(req,"id"),item=db.prepare(`SELECT a.*,u.first_name owner_first_name,u.last_name owner_last_name FROM agreements a LEFT JOIN users u ON u.id=a.owner_id WHERE a.id=? AND a.council_id=?`).get(id,c);if(!item)throw new HttpError(404,"Vereinbarung nicht gefunden.");const documents=db.prepare("SELECT id,title,category,created_at FROM documents WHERE agreement_id=? AND council_id=? ORDER BY created_at DESC").all(id,c);res.json({item,related:{documents}});});
-router.post("/agreements",permit("agreements:write"),(req:AuthRequest,res)=>{const d=agreementSchema.parse(req.body),id=randomUUID(),reference=ref("BV"),db=getDb();db.prepare(`INSERT INTO agreements (id,council_id,reference,title,category,status,valid_from,valid_until,notice_period,after_effect,owner_id,summary,review_at,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,req.user!.councilId,reference,d.title,d.category,d.status,d.validFrom,d.validUntil,d.noticePeriod,d.afterEffect?1:0,d.ownerId,d.summary,d.reviewAt,req.user!.id);audit(db,req,"created","agreement",id,{reference,title:d.title});res.status(201).json({id,reference});});
-router.patch("/agreements/:id",permit("agreements:write"),(req:AuthRequest,res)=>{const d=agreementSchema.partial().parse(req.body),db=getDb();if(!db.prepare("SELECT id FROM agreements WHERE id=? AND council_id=?").get(routeParam(req,"id"),req.user!.councilId))throw new HttpError(404,"Vereinbarung nicht gefunden.");const map:Record<string,string>={title:"title",category:"category",status:"status",validFrom:"valid_from",validUntil:"valid_until",noticePeriod:"notice_period",afterEffect:"after_effect",ownerId:"owner_id",summary:"summary",reviewAt:"review_at"};const e=Object.entries(d).filter(([k])=>map[k]);if(e.length)db.prepare(`UPDATE agreements SET ${e.map(([k])=>`${map[k]}=?`).join(",")},updated_at=CURRENT_TIMESTAMP WHERE id=? AND council_id=?`).run(...e.map(([k,v])=>k==="afterEffect"?(v?1:0):v),routeParam(req,"id"),req.user!.councilId);audit(db,req,"updated","agreement",routeParam(req,"id"));res.status(204).end();});
+router.post("/agreements",permit("agreements:write"),(req:AuthRequest,res)=>{const d=agreementSchema.parse(req.body),id=randomUUID(),reference=ref("BV"),db=getDb();assertOwned(db,req.user!.councilId,"users",d.ownerId,"Federführendes Mitglied");db.prepare(`INSERT INTO agreements (id,council_id,reference,title,category,status,valid_from,valid_until,notice_period,after_effect,owner_id,summary,review_at,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,req.user!.councilId,reference,d.title,d.category,d.status,d.validFrom,d.validUntil,d.noticePeriod,d.afterEffect?1:0,d.ownerId,d.summary,d.reviewAt,req.user!.id);audit(db,req,"created","agreement",id,{reference,title:d.title});res.status(201).json({id,reference});});
+router.patch("/agreements/:id",permit("agreements:write"),(req:AuthRequest,res)=>{const d=agreementSchema.partial().parse(req.body),db=getDb();if(!db.prepare("SELECT id FROM agreements WHERE id=? AND council_id=?").get(routeParam(req,"id"),req.user!.councilId))throw new HttpError(404,"Vereinbarung nicht gefunden.");assertOwned(db,req.user!.councilId,"users",d.ownerId,"Federführendes Mitglied");const map:Record<string,string>={title:"title",category:"category",status:"status",validFrom:"valid_from",validUntil:"valid_until",noticePeriod:"notice_period",afterEffect:"after_effect",ownerId:"owner_id",summary:"summary",reviewAt:"review_at"};const e=Object.entries(d).filter(([k])=>map[k]);if(e.length)db.prepare(`UPDATE agreements SET ${e.map(([k])=>`${map[k]}=?`).join(",")},updated_at=CURRENT_TIMESTAMP WHERE id=? AND council_id=?`).run(...e.map(([k,v])=>k==="afterEffect"?(v?1:0):v),routeParam(req,"id"),req.user!.councilId);audit(db,req,"updated","agreement",routeParam(req,"id"));res.status(204).end();});
 
 router.get("/decisions",(req:AuthRequest,res)=>{const rows=getDb().prepare(`SELECT d.*,m.title meeting_title,c.reference case_reference FROM decisions d JOIN meetings m ON m.id=d.meeting_id LEFT JOIN cases c ON c.id=d.case_id WHERE d.council_id=? ORDER BY d.decided_at DESC`).all(req.user!.councilId);res.json({items:rows});});
-router.get("/decisions/:id",(req:AuthRequest,res)=>{const item=getDb().prepare(`SELECT d.*,m.title meeting_title,m.sequence_no meeting_sequence,a.title agenda_title,c.reference case_reference,c.title case_title FROM decisions d JOIN meetings m ON m.id=d.meeting_id LEFT JOIN agenda_items a ON a.id=d.agenda_item_id LEFT JOIN cases c ON c.id=d.case_id WHERE d.id=? AND d.council_id=?`).get(routeParam(req,"id"),req.user!.councilId);if(!item)throw new HttpError(404,"Beschluss nicht gefunden.");res.json({item,related:{}});});
+router.get("/decisions/:id",(req:AuthRequest,res)=>{const db=getDb(),councilId=req.user!.councilId,item=db.prepare(`SELECT d.*,m.title meeting_title,m.sequence_no meeting_sequence,a.title agenda_title,c.reference case_reference,c.title case_title FROM decisions d JOIN meetings m ON m.id=d.meeting_id LEFT JOIN agenda_items a ON a.id=d.agenda_item_id LEFT JOIN cases c ON c.id=d.case_id WHERE d.id=? AND d.council_id=?`).get(routeParam(req,"id"),councilId) as Record<string,unknown>|undefined;if(!item)throw new HttpError(404,"Beschluss nicht gefunden.");const meetings=db.prepare("SELECT id,sequence_no,title,status,starts_at FROM meetings WHERE id=? AND council_id=?").all(item.meeting_id,councilId),cases=item.case_id?db.prepare("SELECT id,reference,title,status,priority FROM cases WHERE id=? AND council_id=?").all(item.case_id,councilId):[],trainings=db.prepare("SELECT id,title,status,starts_at FROM trainings WHERE decision_id=? AND council_id=? ORDER BY starts_at DESC").all(item.id,councilId);res.json({item,related:{meetings,cases,trainings}});});
 
 router.get("/search",(req:AuthRequest,res)=>{
   const q=String(req.query.q||"").trim();if(q.length<2){res.json({items:[]});return;}const like=`%${q}%`,c=req.user!.councilId,db=getDb();

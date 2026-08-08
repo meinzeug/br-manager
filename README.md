@@ -8,6 +8,7 @@ BR Manager ist eine selbst gehostete, deutschsprachige Arbeitsplattform für Bet
 
 - Dashboard mit persönlichen Terminen, offenen Vorgängen, Aufgaben, Fristen und Aktivitäten
 - durchgängig anklickbare Listen mit URL-verknüpften Detailansichten, Bearbeitungsmasken und Beziehungen zwischen Datensätzen
+- universeller Verknüpfungs-Hub für beidseitige Beziehungen zwischen allen Fachmodulen und kontextbezogene Folgeaufgaben
 - Gremien, Ausschüsse, JAV, SBV, Arbeitsgruppen, Mitglieder und Ersatzränge
 - Rollen: Administration, Vorsitz, Sekretariat, Mitglied, Ersatzmitglied und Lesezugriff
 - Sitzungsworkflow von Planung und Einladung bis Durchführung und Abschluss
@@ -16,6 +17,7 @@ BR Manager ist eine selbst gehostete, deutschsprachige Arbeitsplattform für Bet
 - PDF-Niederschrift und abonnierbarer ICS-Sitzungskalender
 - Mitbestimmungsakten mit Aktenzeichen, Rechtsgrundlage, Priorität, Frist und Zuständigkeit
 - Aufgaben, Wiedervorlagen und Verknüpfungen zu Vorgängen und Sitzungen
+- direkte Zuordnung von Dokumenten zu Vorgängen, Sitzungen und Vereinbarungen sowie von Seminaren zu Entsendebeschlüssen
 - AES-256-GCM-verschlüsselte Dokumentablage mit Versionen, Prüfsumme und Aufbewahrungsdatum
 - Vertrauliche Mitarbeiteranfragen mit dokumentierter Einwilligung
 - Betriebsvereinbarungsregister mit Verhandlung, Laufzeit, Kündigungsfrist, Nachwirkung und Review

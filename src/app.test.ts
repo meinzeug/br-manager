@@ -96,12 +96,40 @@ describe("BR Manager API",()=>{
     expect((await agent.get(`/api/agreements/${agreement.body.id}`)).body.item).toMatchObject({status:"verhandlung",after_effect:1});
   });
 
+  it("verknüpft Module beidseitig und erzeugt Folgeaufgaben aus dem Kontext",async()=>{
+    const member=(await agent.get("/api/members")).body.items[0];
+    const caseResponse=await agent.post("/api/cases").set("x-csrf-token",csrf).send({title:"KI-Richtlinie einführen",category:"technische_einrichtung"});
+    const agreement=await agent.post("/api/agreements").set("x-csrf-token",csrf).send({title:"Rahmenvereinbarung KI",category:"it_ki"});
+    const connection=await agent.post("/api/connections").set("x-csrf-token",csrf).send({sourceType:"case",sourceId:caseResponse.body.id,targetType:"agreement",targetId:agreement.body.id,relation:"Regelungsgrundlage"});
+    expect(connection.status).toBe(201);
+
+    const fromCase=await agent.get(`/api/connections/case/${caseResponse.body.id}`),fromAgreement=await agent.get(`/api/connections/agreement/${agreement.body.id}`);
+    expect(fromCase.body.items[0]).toMatchObject({type:"agreement",id:agreement.body.id,relation:"Regelungsgrundlage",url:`/vereinbarungen?open=${agreement.body.id}`});
+    expect(fromAgreement.body.items[0]).toMatchObject({type:"case",id:caseResponse.body.id,url:`/vorgaenge?open=${caseResponse.body.id}`});
+    expect((await agent.get("/api/connections/options/agreement?q=Rahmenvereinbarung")).body.items[0].id).toBe(agreement.body.id);
+
+    const followUp=await agent.post(`/api/connections/agreement/${agreement.body.id}/tasks`).set("x-csrf-token",csrf).send({title:"KI-Regelungen vergleichen",description:"Vorgang und Vereinbarung abgleichen",assignedTo:member.id,priority:"hoch"});
+    expect(followUp.status).toBe(201);
+    expect((await agent.get(`/api/tasks/${followUp.body.id}`)).body.item).toMatchObject({title:"KI-Regelungen vergleichen",priority:"hoch"});
+    expect((await agent.get(`/api/connections/task/${followUp.body.id}`)).body.items[0]).toMatchObject({type:"agreement",id:agreement.body.id,relation:"Folgeaufgabe"});
+
+    expect((await agent.delete(`/api/connections/${connection.body.id}`).set("x-csrf-token",csrf)).status).toBe(204);
+    expect((await agent.get(`/api/connections/case/${caseResponse.body.id}`)).body.items).toHaveLength(0);
+    const foreignLink=await agent.post("/api/tasks").set("x-csrf-token",csrf).send({title:"Ungültige Zuordnung",caseId:"00000000-0000-4000-8000-000000000000"});
+    expect(foreignLink.status).toBe(400);
+  });
+
   it("verschlüsselt hochgeladene Dokumente transparent",async()=>{
     const content=Buffer.from("Vertrauliche Sitzungsunterlage");
     const upload=await agent.post("/api/documents").set("x-csrf-token",csrf).field("title","Testunterlage").field("category","sitzungsunterlage").attach("file",content,{filename:"unterlage.txt",contentType:"text/plain"});
     expect(upload.status).toBe(201);
     expect((await agent.get(`/api/documents/${upload.body.id}`)).body.related.versions).toHaveLength(1);
-    expect((await agent.patch(`/api/documents/${upload.body.id}`).set("x-csrf-token",csrf).send({title:"Aktualisierte Testunterlage",folder:"Sitzungen"})).status).toBe(204);
+    const linkedCase=(await agent.get("/api/cases")).body.items[0],linkedMeeting=(await agent.get("/api/meetings")).body.items[0],linkedAgreement=(await agent.get("/api/agreements")).body.items[0];
+    expect((await agent.patch(`/api/documents/${upload.body.id}`).set("x-csrf-token",csrf).send({title:"Aktualisierte Testunterlage",folder:"Sitzungen",caseId:linkedCase.id,meetingId:linkedMeeting.id,agreementId:linkedAgreement.id})).status).toBe(204);
+    const linkedDetail=await agent.get(`/api/documents/${upload.body.id}`);
+    expect(linkedDetail.body.related).toMatchObject({cases:[{id:linkedCase.id}],meetings:[{id:linkedMeeting.id}],agreements:[{id:linkedAgreement.id}]});
+    expect((await agent.patch(`/api/documents/${upload.body.id}`).set("x-csrf-token",csrf).send({folder:"Beschlussunterlagen"})).status).toBe(204);
+    expect((await agent.get(`/api/documents/${upload.body.id}`)).body.related).toMatchObject({cases:[{id:linkedCase.id}],meetings:[{id:linkedMeeting.id}],agreements:[{id:linkedAgreement.id}]});
     const nextContent=Buffer.from("Aktualisierte vertrauliche Sitzungsunterlage");
     const version=await agent.post(`/api/documents/${upload.body.id}/versions`).set("x-csrf-token",csrf).attach("file",nextContent,{filename:"unterlage-v2.txt",contentType:"text/plain"});
     expect(version.body.version).toBe(2);
@@ -124,10 +152,13 @@ describe("BR Manager API",()=>{
     expect(committeeDetail.body.related.members[0]).toMatchObject({user_id:member.id,function:"Vorsitz"});
 
     const startsAt=new Date(Date.now()+7*86400000).toISOString(),endsAt=new Date(Date.now()+8*86400000).toISOString();
-    const training=await agent.post("/api/trainings").set("x-csrf-token",csrf).send({userId:member.id,title:"Betriebsverfassungsrecht kompakt",provider:"Bildungswerk",startsAt,endsAt,costEuro:799});
+    const decision=(await agent.get("/api/decisions")).body.items[0];
+    const training=await agent.post("/api/trainings").set("x-csrf-token",csrf).send({userId:member.id,title:"Betriebsverfassungsrecht kompakt",provider:"Bildungswerk",startsAt,endsAt,costEuro:799,decisionId:decision.id});
     expect(training.status).toBe(201);
     expect((await agent.patch(`/api/trainings/${training.body.id}`).set("x-csrf-token",csrf).send({status:"gebucht",costEuro:849})).status).toBe(204);
-    expect((await agent.get(`/api/trainings/${training.body.id}`)).body.item).toMatchObject({status:"gebucht",cost_cents:84900});
+    const trainingDetail=await agent.get(`/api/trainings/${training.body.id}`);
+    expect(trainingDetail.body.item).toMatchObject({status:"gebucht",cost_cents:84900});
+    expect(trainingDetail.body.related.decisions[0].id).toBe(decision.id);
   });
 
   it("setzt Rollenrechte serverseitig durch",async()=>{
@@ -138,6 +169,7 @@ describe("BR Manager API",()=>{
     expect(login.status).toBe(200);
     const forbidden=await reader.post("/api/tasks").set("x-csrf-token",login.body.csrfToken).send({title:"Darf nicht angelegt werden"});
     expect(forbidden.status).toBe(403);
+    expect((await reader.post("/api/connections").set("x-csrf-token",login.body.csrfToken).send({})).status).toBe(403);
   });
 
   it("schützt Konten optional mit standardkonformer TOTP-2FA",async()=>{

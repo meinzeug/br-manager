@@ -299,6 +299,19 @@ function migrate(db: SqliteDatabase): void {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS entity_connections (
+      id TEXT PRIMARY KEY,
+      council_id TEXT NOT NULL REFERENCES councils(id) ON DELETE CASCADE,
+      source_type TEXT NOT NULL CHECK(source_type IN ('case','task','inquiry','agreement','decision','document','meeting','training','member','committee')),
+      source_id TEXT NOT NULL,
+      target_type TEXT NOT NULL CHECK(target_type IN ('case','task','inquiry','agreement','decision','document','meeting','training','member','committee')),
+      target_id TEXT NOT NULL,
+      relation TEXT NOT NULL DEFAULT 'Thematischer Zusammenhang',
+      created_by TEXT NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(council_id, source_type, source_id, target_type, target_id)
+    );
+
     CREATE TABLE IF NOT EXISTS audit_logs (
       id TEXT PRIMARY KEY,
       council_id TEXT REFERENCES councils(id) ON DELETE SET NULL,
@@ -317,6 +330,8 @@ function migrate(db: SqliteDatabase): void {
     CREATE INDEX IF NOT EXISTS idx_meetings_start ON meetings(council_id, starts_at);
     CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(council_id, assigned_to, status);
     CREATE INDEX IF NOT EXISTS idx_documents_council ON documents(council_id, category);
+    CREATE INDEX IF NOT EXISTS idx_connections_source ON entity_connections(council_id, source_type, source_id);
+    CREATE INDEX IF NOT EXISTS idx_connections_target ON entity_connections(council_id, target_type, target_id);
     CREATE INDEX IF NOT EXISTS idx_audit_council_date ON audit_logs(council_id, created_at DESC);
   `);
   ensureColumn(db,"users","two_factor_secret","TEXT");

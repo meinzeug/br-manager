@@ -13,19 +13,20 @@ export type Permission =
   | "inquiries:write"
   | "agreements:write"
   | "trainings:write"
+  | "links:write"
   | "audit:read";
 
 const allPermissions: Permission[] = [
   "council:manage", "members:manage", "meetings:write", "cases:write",
   "documents:write", "tasks:write", "inquiries:write", "agreements:write",
-  "trainings:write", "audit:read",
+  "trainings:write", "links:write", "audit:read",
 ];
 
 export const rolePermissions: Record<Role, Permission[]> = {
   admin: allPermissions,
   vorsitz: allPermissions,
-  sekretariat: ["members:manage", "meetings:write", "cases:write", "documents:write", "tasks:write", "inquiries:write", "agreements:write", "trainings:write"],
-  mitglied: ["meetings:write", "cases:write", "documents:write", "tasks:write", "inquiries:write", "agreements:write", "trainings:write"],
+  sekretariat: ["members:manage", "meetings:write", "cases:write", "documents:write", "tasks:write", "inquiries:write", "agreements:write", "trainings:write", "links:write"],
+  mitglied: ["meetings:write", "cases:write", "documents:write", "tasks:write", "inquiries:write", "agreements:write", "trainings:write", "links:write"],
   ersatzmitglied: ["tasks:write", "inquiries:write"],
   lesezugriff: [],
 };
