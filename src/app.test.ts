@@ -84,6 +84,9 @@ describe("BR Manager API",()=>{
     expect(task.status).toBe(201);
     expect((await agent.patch(`/api/tasks/${task.body.id}`).set("x-csrf-token",csrf).send({status:"in_arbeit",priority:"hoch"})).status).toBe(204);
     expect((await agent.get(`/api/tasks/${task.body.id}`)).body.item).toMatchObject({status:"in_arbeit",priority:"hoch"});
+    const personalDashboard=await agent.get("/api/dashboard");
+    expect(personalDashboard.body.myTasks).toEqual(expect.arrayContaining([expect.objectContaining({id:task.body.id,title:"Unterlagen prüfen"})]));
+    expect(typeof personalDashboard.body.stats.overdue).toBe("number");
 
     const inquiry=await agent.post("/api/inquiries").set("x-csrf-token",csrf).send({subject:"Arbeitszeit klären",requesterName:"Erika Beispiel",description:"Bitte um vertrauliche Beratung",consentRecorded:true});
     expect(inquiry.status).toBe(201);

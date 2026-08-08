@@ -12,10 +12,15 @@ export function setCsrf(value:string){csrfToken=value;}
 
 export async function api<T=unknown>(url:string,options:RequestInit={}):Promise<T>{
   const headers=new Headers(options.headers);
+  const method=(options.method||"GET").toUpperCase();
   if(options.body && !(options.body instanceof FormData))headers.set("Content-Type","application/json");
-  if(options.method && !["GET","HEAD"].includes(options.method.toUpperCase()))headers.set("X-CSRF-Token",csrfToken);
+  if(!["GET","HEAD"].includes(method))headers.set("X-CSRF-Token",csrfToken);
   const response=await fetch(`/api${url}`,{...options,headers,credentials:"same-origin"});
   if(!response.ok){let message=`Fehler ${response.status}`;try{const body=await response.json() as {error?:string};message=body.error||message;}catch{/* response is not JSON */}throw new Error(message);}
+  if(!["GET","HEAD"].includes(method)&&!url.startsWith("/auth/")){
+    const messages:Record<string,string>={POST:"Erfolgreich angelegt",PATCH:"Änderungen gespeichert",PUT:"Änderungen gespeichert",DELETE:"Eintrag entfernt"};
+    window.dispatchEvent(new CustomEvent("br-manager:toast",{detail:{message:messages[method]||"Aktion erfolgreich",tone:"success"}}));
+  }
   if(response.status===204)return undefined as T;
   return response.json() as Promise<T>;
 }

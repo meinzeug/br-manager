@@ -32,6 +32,8 @@ router.get("/dashboard", (req: AuthRequest, res) => {
     openInquiries: scalar("SELECT COUNT(*) count FROM inquiries WHERE council_id=? AND status NOT IN ('erledigt','archiviert')", council),
     activeAgreements: scalar("SELECT COUNT(*) count FROM agreements WHERE council_id=? AND status IN ('gueltig','verhandlung')", council),
     documents: scalar("SELECT COUNT(*) count FROM documents WHERE council_id=?", council),
+    overdue: scalar("SELECT COUNT(*) count FROM cases WHERE council_id=? AND due_at<datetime('now') AND status NOT IN ('erledigt','archiviert','beschlossen')", council)
+      + scalar("SELECT COUNT(*) count FROM tasks WHERE council_id=? AND due_at<datetime('now') AND status<>'erledigt'", council),
   };
   const meetings = db.prepare(`SELECT m.*, c.name committee_name FROM meetings m LEFT JOIN committees c ON c.id=m.committee_id
     WHERE m.council_id=? AND m.starts_at>=datetime('now','-1 day') ORDER BY m.starts_at LIMIT 5`).all(council);
@@ -41,7 +43,10 @@ router.get("/dashboard", (req: AuthRequest, res) => {
     ORDER BY due_at LIMIT 8`).all(council, council);
   const activity = db.prepare(`SELECT a.*, u.first_name, u.last_name FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id
     WHERE a.council_id=? ORDER BY a.created_at DESC LIMIT 8`).all(council);
-  res.json({ stats, meetings, deadlines, activity });
+  const myTasks = db.prepare(`SELECT t.id,t.title,t.status,t.priority,t.due_at,c.reference case_reference
+    FROM tasks t LEFT JOIN cases c ON c.id=t.case_id WHERE t.council_id=? AND t.assigned_to=? AND t.status<>'erledigt'
+    ORDER BY CASE WHEN t.due_at IS NULL THEN 1 ELSE 0 END,t.due_at,t.created_at LIMIT 6`).all(council,req.user!.id);
+  res.json({ stats, meetings, deadlines, myTasks, activity });
 });
 
 const caseSchema = z.object({

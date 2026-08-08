@@ -7,6 +7,9 @@ BR Manager ist eine selbst gehostete, deutschsprachige Arbeitsplattform für Bet
 ## Funktionsumfang
 
 - Dashboard mit persönlichen Terminen, offenen Vorgängen, Aufgaben, Fristen und Aktivitäten
+- persönliche Fokusliste mit direkt erledigbaren Aufgaben und einem gremiumweiten Überfälligkeitsindikator
+- zentrale Befehlssuche per `Strg/⌘ + K` für modulübergreifende Treffer, BetrVG-Vorschriften und Schnellaktionen
+- umschaltbare Tabellen- und moderne Boardansicht für Vorgänge und Aufgaben mit Suche, „Meine“- und Überfälligkeitsfilter
 - durchgängig anklickbare Listen mit URL-verknüpften Detailansichten, Bearbeitungsmasken und Beziehungen zwischen Datensätzen
 - universeller Verknüpfungs-Hub für beidseitige Beziehungen zwischen allen Fachmodulen und kontextbezogene Folgeaufgaben
 - Gremien, Ausschüsse, JAV, SBV, Arbeitsgruppen, Mitglieder und Ersatzränge
@@ -18,6 +21,7 @@ BR Manager ist eine selbst gehostete, deutschsprachige Arbeitsplattform für Bet
 - Mitbestimmungsakten mit Aktenzeichen, Rechtsgrundlage, Priorität, Frist und Zuständigkeit
 - 22 geführte Standardverfahren für typische Fälle – von Kündigungsanhörung, personeller Maßnahme und Arbeitszeit über KI/IT, Gesundheitsschutz und Beschwerde bis Betriebsänderung, Schulung und BR-Wahl
 - einsteigerfreundlicher Fallassistent: Auswahl nach Alltagssituation statt Paragraph, Klartext-Erklärung, erste Prüffrage, automatisch erzeugte Checkliste, Zuständigkeit und optionale Tagesordnung
+- Arbeitsschritte geführter Verfahren direkt im Vorgang erledigen oder wieder öffnen, ohne die Detailansicht zu verlassen
 - vollständige, lokal verfügbare amtliche BetrVG-Ausgabe mit 148 Vorschriften, Themen- und Volltextsuche, verständlicher Kurzeinordnung und direktem Link zur amtlichen Quelle
 - kontextabhängige Vorschläge und manuelle Zuordnung von BetrVG-Vorschriften in Vorgängen, Aufgaben, Anfragen, Vereinbarungen, Beschlüssen, Dokumenten, Sitzungen, Seminaren, Mitgliedern und Ausschüssen
 - Aufgaben, Wiedervorlagen und Verknüpfungen zu Vorgängen und Sitzungen
@@ -27,6 +31,7 @@ BR Manager ist eine selbst gehostete, deutschsprachige Arbeitsplattform für Bet
 - Betriebsvereinbarungsregister mit Verhandlung, Laufzeit, Kündigungsfrist, Nachwirkung und Review
 - Seminar- und Schulungsplanung mit Status, Kosten und Beschlussbezug
 - globale Direktsuche, persönliche Benachrichtigungen sowie mandantenscharfes Audit-Protokoll
+- einheitliche Erfolgsrückmeldungen, Tastatursteuerung, Sprunglink zum Hauptinhalt und responsive Boardbedienung
 - lokaler, trackerfreier Betrieb ohne externe Cloud- oder Schriftart-Abhängigkeit
 
 Die zugrunde liegende Markt- und Rechtsrecherche ist in [docs/MARKTRECHERCHE.md](docs/MARKTRECHERCHE.md) dokumentiert.
