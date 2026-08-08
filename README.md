@@ -16,6 +16,10 @@ BR Manager ist eine selbst gehostete, deutschsprachige Arbeitsplattform für Bet
 - Beschlüsse mit Beschlusstext, Stimmenverhältnis, Beschlussfähigkeit und Ergebnis
 - PDF-Niederschrift und abonnierbarer ICS-Sitzungskalender
 - Mitbestimmungsakten mit Aktenzeichen, Rechtsgrundlage, Priorität, Frist und Zuständigkeit
+- 22 geführte Standardverfahren für typische Fälle – von Kündigungsanhörung, personeller Maßnahme und Arbeitszeit über KI/IT, Gesundheitsschutz und Beschwerde bis Betriebsänderung, Schulung und BR-Wahl
+- einsteigerfreundlicher Fallassistent: Auswahl nach Alltagssituation statt Paragraph, Klartext-Erklärung, erste Prüffrage, automatisch erzeugte Checkliste, Zuständigkeit und optionale Tagesordnung
+- vollständige, lokal verfügbare amtliche BetrVG-Ausgabe mit 148 Vorschriften, Themen- und Volltextsuche, verständlicher Kurzeinordnung und direktem Link zur amtlichen Quelle
+- kontextabhängige Vorschläge und manuelle Zuordnung von BetrVG-Vorschriften in Vorgängen, Aufgaben, Anfragen, Vereinbarungen, Beschlüssen, Dokumenten, Sitzungen, Seminaren, Mitgliedern und Ausschüssen
 - Aufgaben, Wiedervorlagen und Verknüpfungen zu Vorgängen und Sitzungen
 - direkte Zuordnung von Dokumenten zu Vorgängen, Sitzungen und Vereinbarungen sowie von Seminaren zu Entsendebeschlüssen
 - AES-256-GCM-verschlüsselte Dokumentablage mit Versionen, Prüfsumme und Aufbewahrungsdatum
@@ -56,6 +60,14 @@ npm test
 npm run build
 npm start
 ```
+
+Die lokale BetrVG-Ausgabe wird reproduzierbar aus der amtlichen XML-Fassung von „Gesetze im Internet“ aktualisiert:
+
+```bash
+node scripts/update-betrvg.mjs
+```
+
+Quelle, Versionsstand und der sichere Aktualisierungsweg sind in [docs/RECHTSQUELLEN.md](docs/RECHTSQUELLEN.md) dokumentiert. Die automatisch angelegten Fristen sind bewusst als Orientierung gekennzeichnet: Zugang, Fristbeginn, Wochenenden, Feiertage, Tarifverträge, Wahlordnung, Rechtsprechung und Besonderheiten des Einzelfalls müssen geprüft werden.
 
 ## Produktiver systemd-Betrieb
 

@@ -161,6 +161,44 @@ describe("BR Manager API",()=>{
     expect(trainingDetail.body.related.decisions[0].id).toBe(decision.id);
   });
 
+  it("liefert das vollständige BetrVG und verständliche Themenvorschläge",async()=>{
+    const meta=await agent.get("/api/legal/meta");
+    expect(meta.status).toBe(200);
+    expect(meta.body).toMatchObject({abbreviation:"BetrVG",count:148});
+    const provision=await agent.get("/api/legal/provisions/87");
+    expect(provision.body.item).toMatchObject({citation:"§ 87",title:"Mitbestimmungsrechte"});
+    expect(provision.body.item.text).toContain("technischen Einrichtungen");
+    expect(provision.body.item.sourceUrl).toContain("gesetze-im-internet.de");
+
+    const target=await agent.post("/api/cases").set("x-csrf-token",csrf).send({title:"Neue KI-Software zur Leistungsbewertung",category:"technische_einrichtung"});
+    const suggestions=await agent.get(`/api/legal/suggestions/case/${target.body.id}`);
+    expect(suggestions.body.items).toEqual(expect.arrayContaining([expect.objectContaining({id:"87"}),expect.objectContaining({id:"79a"})]));
+    expect((await agent.post("/api/legal/links").set("x-csrf-token",csrf).send({entityType:"case",entityId:target.body.id,provisionIds:["87","79a"]})).status).toBe(201);
+    const links=await agent.get(`/api/legal/links/case/${target.body.id}`);
+    expect(links.body.items).toEqual(expect.arrayContaining([expect.objectContaining({id:"87"}),expect.objectContaining({id:"79a"})]));
+    expect((await agent.get("/api/search?q=Mitbestimmungsrechte")).body.items).toEqual(expect.arrayContaining([expect.objectContaining({type:"BetrVG",url:"/rechtswissen?open=87"})]));
+  });
+
+  it("startet Standardverfahren mit Vorgang, Rechtsgrundlagen, Checkliste und Sitzung",async()=>{
+    const templates=await agent.get("/api/procedure-templates");
+    expect(templates.body.items.length).toBeGreaterThanOrEqual(20);
+    const ordinary=templates.body.items.find((item:{id:string})=>item.id==="ordentliche-kuendigung");
+    expect(ordinary.steps.length).toBeGreaterThanOrEqual(5);
+    const member=(await agent.get("/api/members")).body.items[0],meeting=(await agent.get("/api/meetings")).body.items[0];
+    const started=await agent.post("/api/procedure-templates/ordentliche-kuendigung/start").set("x-csrf-token",csrf).send({title:"Anhörung Kündigung Beispiel",receivedAt:new Date().toISOString(),responsibleId:member.id,meetingId:meeting.id});
+    expect(started.status).toBe(201);
+    expect(started.body).toMatchObject({taskCount:ordinary.steps.length});
+    const detail=await agent.get(`/api/cases/${started.body.id}`);
+    expect(detail.body.item).toMatchObject({procedure_template_id:"ordentliche-kuendigung",priority:"kritisch"});
+    expect(detail.body.item.legal_basis).toContain("§ 102 BetrVG");
+    expect(detail.body.related.tasks).toHaveLength(ordinary.steps.length);
+    expect(detail.body.related.tasks.every((task:{workflow_step?:string})=>Boolean(task.workflow_step))).toBe(true);
+    const legal=await agent.get(`/api/legal/links/case/${started.body.id}`);
+    expect(legal.body.items).toEqual(expect.arrayContaining([expect.objectContaining({id:"102"})]));
+    const meetingDetail=await agent.get(`/api/meetings/${meeting.id}`);
+    expect(meetingDetail.body.agenda).toEqual(expect.arrayContaining([expect.objectContaining({case_id:started.body.id,title:"Anhörung Kündigung Beispiel"})]));
+  });
+
   it("setzt Rollenrechte serverseitig durch",async()=>{
     const create=await agent.post("/api/members").set("x-csrf-token",csrf).send({email:"leser@test.local",firstName:"Lena",lastName:"Leser",role:"lesezugriff",temporaryPassword:"Read-Only-Password!"});
     expect(create.status).toBe(201);
@@ -170,6 +208,8 @@ describe("BR Manager API",()=>{
     const forbidden=await reader.post("/api/tasks").set("x-csrf-token",login.body.csrfToken).send({title:"Darf nicht angelegt werden"});
     expect(forbidden.status).toBe(403);
     expect((await reader.post("/api/connections").set("x-csrf-token",login.body.csrfToken).send({})).status).toBe(403);
+    expect((await reader.post("/api/legal/links").set("x-csrf-token",login.body.csrfToken).send({})).status).toBe(403);
+    expect((await reader.post("/api/procedure-templates/ordentliche-kuendigung/start").set("x-csrf-token",login.body.csrfToken).send({})).status).toBe(403);
   });
 
   it("schützt Konten optional mit standardkonformer TOTP-2FA",async()=>{

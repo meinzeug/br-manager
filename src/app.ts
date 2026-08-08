@@ -12,6 +12,7 @@ import meetings from "./routes/meetings.js";
 import organization from "./routes/organization.js";
 import work from "./routes/work.js";
 import connections from "./routes/connections.js";
+import legal from "./routes/legal.js";
 
 const dirname=path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,7 +41,7 @@ export function createApp(){
   api.post("/auth/2fa/setup",setupTwoFactor);
   api.post("/auth/2fa/enable",enableTwoFactor);
   api.post("/auth/2fa/disable",disableTwoFactor);
-  api.use(connections,work,meetings,documents,organization);
+  api.use(legal,connections,work,meetings,documents,organization);
   api.use(notFound);
   app.use("/api",api);
 

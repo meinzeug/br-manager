@@ -8,6 +8,7 @@ import { HttpError } from "../http.js";
 import type { AuthRequest } from "../types.js";
 import { notify } from "../notifications.js";
 import { assertOwned } from "../ownership.js";
+import { searchProvisions } from "../legal.js";
 
 const router = Router();
 const routeParam=(req:AuthRequest,key:string)=>String(req.params[key]);
@@ -168,7 +169,9 @@ router.get("/search",(req:AuthRequest,res)=>{
     UNION ALL SELECT id,reference,title,'Beschluss','/beschluesse?open='||id FROM decisions WHERE council_id=? AND (title LIKE ? OR reference LIKE ? OR resolution_text LIKE ?)
     UNION ALL SELECT id,'',title,'Dokument','/dokumente?open='||id FROM documents WHERE council_id=? AND title LIKE ?
     UNION ALL SELECT id,'',title,'Sitzung','/sitzungen/'||id FROM meetings WHERE council_id=? AND title LIKE ? LIMIT 30`)
-    .all(c,like,like,like,c,like,like,c,like,like,like,c,like,like,like,c,like,like,like,c,like,c,like);res.json({items});
+    .all(c,like,like,like,c,like,like,c,like,like,like,c,like,like,like,c,like,like,like,c,like,c,like) as Array<Record<string,unknown>>;
+  const legal=searchProvisions(q).slice(0,10).map(provision=>({id:provision.id,reference:provision.citation,title:provision.title,type:"BetrVG",url:`/rechtswissen?open=${provision.id}`}));
+  res.json({items:[...items,...legal].slice(0,30)});
 });
 
 export default router;

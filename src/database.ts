@@ -103,6 +103,7 @@ function migrate(db: SqliteDatabase): void {
       due_at TEXT,
       responsible_id TEXT REFERENCES users(id) ON DELETE SET NULL,
       confidentiality TEXT NOT NULL DEFAULT 'gremium',
+      procedure_template_id TEXT,
       created_by TEXT NOT NULL REFERENCES users(id),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -191,6 +192,7 @@ function migrate(db: SqliteDatabase): void {
       assigned_to TEXT REFERENCES users(id) ON DELETE SET NULL,
       case_id TEXT REFERENCES cases(id) ON DELETE CASCADE,
       meeting_id TEXT REFERENCES meetings(id) ON DELETE CASCADE,
+      workflow_step TEXT,
       created_by TEXT NOT NULL REFERENCES users(id),
       completed_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -312,6 +314,17 @@ function migrate(db: SqliteDatabase): void {
       UNIQUE(council_id, source_type, source_id, target_type, target_id)
     );
 
+    CREATE TABLE IF NOT EXISTS entity_legal_links (
+      id TEXT PRIMARY KEY,
+      council_id TEXT NOT NULL REFERENCES councils(id) ON DELETE CASCADE,
+      entity_type TEXT NOT NULL CHECK(entity_type IN ('case','task','inquiry','agreement','decision','document','meeting','training','member','committee')),
+      entity_id TEXT NOT NULL,
+      provision_id TEXT NOT NULL,
+      created_by TEXT NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(council_id, entity_type, entity_id, provision_id)
+    );
+
     CREATE TABLE IF NOT EXISTS audit_logs (
       id TEXT PRIMARY KEY,
       council_id TEXT REFERENCES councils(id) ON DELETE SET NULL,
@@ -332,10 +345,13 @@ function migrate(db: SqliteDatabase): void {
     CREATE INDEX IF NOT EXISTS idx_documents_council ON documents(council_id, category);
     CREATE INDEX IF NOT EXISTS idx_connections_source ON entity_connections(council_id, source_type, source_id);
     CREATE INDEX IF NOT EXISTS idx_connections_target ON entity_connections(council_id, target_type, target_id);
+    CREATE INDEX IF NOT EXISTS idx_legal_links_entity ON entity_legal_links(council_id, entity_type, entity_id);
     CREATE INDEX IF NOT EXISTS idx_audit_council_date ON audit_logs(council_id, created_at DESC);
   `);
   ensureColumn(db,"users","two_factor_secret","TEXT");
   ensureColumn(db,"users","two_factor_enabled","INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db,"cases","procedure_template_id","TEXT");
+  ensureColumn(db,"tasks","workflow_step","TEXT");
 }
 
 function ensureColumn(db:SqliteDatabase,table:string,column:string,declaration:string):void{
