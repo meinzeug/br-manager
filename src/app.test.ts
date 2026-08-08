@@ -44,6 +44,8 @@ describe("BR Manager API",()=>{
     });
     expect(caseResponse.status).toBe(201);
     expect(caseResponse.body.reference).toMatch(/^V-/);
+    expect((await agent.get(`/api/cases/${caseResponse.body.id}`)).body.item.title).toBe("Versetzung eines Beschäftigten");
+    expect((await agent.patch(`/api/cases/${caseResponse.body.id}`).set("x-csrf-token",csrf).send({priority:"kritisch"})).status).toBe(204);
 
     const start=new Date(Date.now()+86400000).toISOString();
     const end=new Date(Date.now()+90000000).toISOString();
@@ -53,6 +55,7 @@ describe("BR Manager API",()=>{
 
     const agenda=await agent.post(`/api/meetings/${meetingId}/agenda`).set("x-csrf-token",csrf).send({title:"Versetzung beraten",kind:"beschluss",caseId:caseResponse.body.id});
     expect(agenda.status).toBe(201);
+    expect((await agent.patch(`/api/meetings/${meetingId}/agenda/${agenda.body.id}`).set("x-csrf-token",csrf).send({durationMinutes:30,isConfidential:true})).status).toBe(204);
 
     const members=await agent.get("/api/members");
     const userId=members.body.items[0].id as string;
@@ -64,15 +67,67 @@ describe("BR Manager API",()=>{
     });
     expect(decision.status).toBe(201);
     expect(decision.body).toMatchObject({result:"angenommen",quorumMet:true});
+    expect((await agent.get(`/api/decisions/${decision.body.id}`)).body.item.reference).toBe(decision.body.reference);
+    const detail=await agent.get(`/api/meetings/${meetingId}`);
+    expect(detail.body.agenda[0]).toMatchObject({duration_minutes:30,is_confidential:1});
+    expect(detail.body.decisions[0].id).toBe(decision.body.id);
+
+    const search=await agent.get("/api/search?q=Versetzung");
+    expect(search.body.items).toEqual(expect.arrayContaining([expect.objectContaining({url:`/vorgaenge?open=${caseResponse.body.id}`})]));
+    const notifications=await agent.get("/api/notifications");
+    expect(notifications.body.items).toEqual(expect.arrayContaining([expect.objectContaining({link:`/beschluesse?open=${decision.body.id}`})]));
+  });
+
+  it("öffnet und bearbeitet Aufgaben, Anfragen und Vereinbarungen",async()=>{
+    const member=(await agent.get("/api/members")).body.items[0];
+    const task=await agent.post("/api/tasks").set("x-csrf-token",csrf).send({title:"Unterlagen prüfen",description:"Alle Anlagen prüfen",assignedTo:member.id});
+    expect(task.status).toBe(201);
+    expect((await agent.patch(`/api/tasks/${task.body.id}`).set("x-csrf-token",csrf).send({status:"in_arbeit",priority:"hoch"})).status).toBe(204);
+    expect((await agent.get(`/api/tasks/${task.body.id}`)).body.item).toMatchObject({status:"in_arbeit",priority:"hoch"});
+
+    const inquiry=await agent.post("/api/inquiries").set("x-csrf-token",csrf).send({subject:"Arbeitszeit klären",requesterName:"Erika Beispiel",description:"Bitte um vertrauliche Beratung",consentRecorded:true});
+    expect(inquiry.status).toBe(201);
+    expect((await agent.patch(`/api/inquiries/${inquiry.body.id}`).set("x-csrf-token",csrf).send({status:"in_bearbeitung",outcome:"Termin vereinbart"})).status).toBe(204);
+    expect((await agent.get(`/api/inquiries/${inquiry.body.id}`)).body.item.outcome).toBe("Termin vereinbart");
+
+    const agreement=await agent.post("/api/agreements").set("x-csrf-token",csrf).send({title:"Mobile Arbeit",category:"arbeitszeit",summary:"Regelt hybride Arbeit"});
+    expect(agreement.status).toBe(201);
+    expect((await agent.patch(`/api/agreements/${agreement.body.id}`).set("x-csrf-token",csrf).send({status:"verhandlung",afterEffect:true})).status).toBe(204);
+    expect((await agent.get(`/api/agreements/${agreement.body.id}`)).body.item).toMatchObject({status:"verhandlung",after_effect:1});
   });
 
   it("verschlüsselt hochgeladene Dokumente transparent",async()=>{
     const content=Buffer.from("Vertrauliche Sitzungsunterlage");
     const upload=await agent.post("/api/documents").set("x-csrf-token",csrf).field("title","Testunterlage").field("category","sitzungsunterlage").attach("file",content,{filename:"unterlage.txt",contentType:"text/plain"});
     expect(upload.status).toBe(201);
+    expect((await agent.get(`/api/documents/${upload.body.id}`)).body.related.versions).toHaveLength(1);
+    expect((await agent.patch(`/api/documents/${upload.body.id}`).set("x-csrf-token",csrf).send({title:"Aktualisierte Testunterlage",folder:"Sitzungen"})).status).toBe(204);
+    const nextContent=Buffer.from("Aktualisierte vertrauliche Sitzungsunterlage");
+    const version=await agent.post(`/api/documents/${upload.body.id}/versions`).set("x-csrf-token",csrf).attach("file",nextContent,{filename:"unterlage-v2.txt",contentType:"text/plain"});
+    expect(version.body.version).toBe(2);
     const download=await agent.get(`/api/documents/${upload.body.id}/download`).buffer(true);
     expect(download.status).toBe(200);
-    expect(download.text).toBe(content.toString());
+    expect(download.text).toBe(nextContent.toString());
+  });
+
+  it("pflegt Ausschüsse, Mitgliedschaften und Schulungen über Detailmasken",async()=>{
+    const member=(await agent.get("/api/members")).body.items[0];
+    expect((await agent.get(`/api/members/${member.id}`)).body.item.display_name).toContain(member.first_name);
+    expect((await agent.patch(`/api/members/${member.id}`).set("x-csrf-token",csrf).send({position:"Betriebsratsvorsitz",temporaryPassword:""})).status).toBe(204);
+    expect((await agent.get(`/api/members/${member.id}`)).body.item.position).toBe("Betriebsratsvorsitz");
+
+    const committee=await agent.post("/api/committees").set("x-csrf-token",csrf).send({name:"Digitalausschuss",kind:"ausschuss",description:"Begleitet digitale Vorhaben"});
+    expect(committee.status).toBe(201);
+    expect((await agent.put(`/api/committees/${committee.body.id}/members`).set("x-csrf-token",csrf).send({members:[{userId:member.id,function:"Vorsitz"}]})).status).toBe(204);
+    expect((await agent.patch(`/api/committees/${committee.body.id}`).set("x-csrf-token",csrf).send({description:"Digitale Vorhaben und KI"})).status).toBe(204);
+    const committeeDetail=await agent.get(`/api/committees/${committee.body.id}`);
+    expect(committeeDetail.body.related.members[0]).toMatchObject({user_id:member.id,function:"Vorsitz"});
+
+    const startsAt=new Date(Date.now()+7*86400000).toISOString(),endsAt=new Date(Date.now()+8*86400000).toISOString();
+    const training=await agent.post("/api/trainings").set("x-csrf-token",csrf).send({userId:member.id,title:"Betriebsverfassungsrecht kompakt",provider:"Bildungswerk",startsAt,endsAt,costEuro:799});
+    expect(training.status).toBe(201);
+    expect((await agent.patch(`/api/trainings/${training.body.id}`).set("x-csrf-token",csrf).send({status:"gebucht",costEuro:849})).status).toBe(204);
+    expect((await agent.get(`/api/trainings/${training.body.id}`)).body.item).toMatchObject({status:"gebucht",cost_cents:84900});
   });
 
   it("setzt Rollenrechte serverseitig durch",async()=>{
