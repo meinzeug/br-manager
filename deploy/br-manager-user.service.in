@@ -1,0 +1,25 @@
+[Unit]
+Description=BR Manager – digitale Betriebsratsarbeit
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=@@APP_DIR@@
+EnvironmentFile=@@ENV_FILE@@
+ExecStart=@@NODE_BIN@@ @@APP_DIR@@/dist/server/server.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=@@DATA_DIR@@
+
+[Install]
+WantedBy=default.target
